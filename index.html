@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<!-- FIND THE NOTE! - index.html
+     This file is the STRUCTURE of the page: the words and empty spaces.
+     style.css makes it look good, and script.js makes it work.
+     The JavaScript fills in the empty spots (the beats, the level info, the messages). -->
+<html lang="en"> <!-- lang tells screen readers which language to read in -->
+<head>
+  <meta charset="UTF-8"> <!-- lets the page show symbols like hearts -->
+  <meta name="viewport" content="width=device-width, initial-scale=1"> <!-- makes the page fit phone screens -->
+  <title>Find the Note!</title> <!-- the text on the browser tab -->
+  <link rel="stylesheet" href="style.css"> <!-- loads the look from style.css -->
+</head>
+<body>
+  <!-- <main> is the white card that holds the whole game -->
+  <main>
+    <h1>Find the Note!</h1>
+
+    <!-- Short instructions for the player -->
+    <p class="intro">You will hear a melody, then a second version with one note changed. Pick the beat that changed. Clear all 10 levels before you lose your 3 lives.</p>
+
+    <!-- The three info boxes. Each is empty here; script.js writes into them. -->
+    <p id="hud">
+      <span id="levelInfo"></span>   <!-- "Level 3 of 10" -->
+      <span id="livesInfo"></span>   <!-- "Lives: 3 and hearts" -->
+      <span id="streakInfo"></span>  <!-- "Streak: 2" -->
+    </p>
+
+    <!-- The beat buttons. This list starts empty, and script.js builds one button per beat
+         for each round. aria-label gives screen readers a name for the group. -->
+    <ol id="beats" aria-label="The beats of the melody"></ol>
+
+    <!-- The three action buttons. "hidden" means they start out invisible;
+         script.js shows them when they are needed. -->
+    <div id="controls">
+      <button id="play" class="action" type="button">Play both melodies</button>
+      <button id="next" class="action" type="button" hidden>Next level</button>
+      <button id="restart" class="action secondary" type="button" hidden>Restart</button>
+    </div>
+
+    <!-- The message box. role="status" tells screen readers to read out
+         changes to this text politely, so blind players hear what is happening. -->
+    <p id="status" role="status"></p>
+  </main>
+
+  <!-- The JavaScript goes LAST so all the elements above exist before it runs. -->
+  <script src="script.js"></script>
+</body>
+</html>

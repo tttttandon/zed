@@ -1,0 +1,347 @@
+/* =====================================================================
+   FIND THE NOTE! - style.css
+   This file controls how the page LOOKS. (index.html is the structure,
+   script.js is the behavior.)
+
+   Look: neo-brutalist. That means flat colors, thick black outlines,
+   hard offset shadows with NO blur, and heavy bold type. Nothing is soft.
+
+   Sections in this file:
+     1. Variables (colors, fonts, sizes)
+     2. Page basics
+     3. The main card
+     4. Title and intro text
+     5. Level / lives / streak boxes
+     6. The row of beats
+     7. Beat buttons: base look
+     8. Beat buttons: hover, pressed and locked
+     9. Beat buttons: after a guess
+    10. Beat buttons: the one playing right now
+    11. Play / Next / Restart buttons
+    12. Keyboard focus and the hidden attribute
+    13. Status message box
+    14. Reduced motion
+   ===================================================================== */
+
+
+/* ---------------------------------------------------------------------
+   1. VARIABLES
+   Values written once here and reused everywhere with var(--name).
+   Change one and the whole page updates.
+   --------------------------------------------------------------------- */
+:root {
+  --ink: #000;                 /* all text and outlines */
+  --paper: #fff;               /* white card color */
+  --yellow: #ffd83d;           /* page background, Play button */
+  --pink: #ff8fc8;            /* lives box, wrong guess */
+  --blue: #7aa2ff;             /* title block */
+  --mint: #6ee7b0;             /* streak box, correct answer, Next button */
+  --grey: #e4e4e4;             /* locked (disabled) things */
+  --border: 4px solid var(--ink);          /* the standard thick outline */
+  --shadow: 6px 6px 0 var(--ink);          /* hard shadow: right 6px, down 6px, 0 blur */
+  --focus: #1d3bff;            /* keyboard focus outline */
+  --display: "Arial Black", "Helvetica Neue", Impact, Arial, sans-serif;  /* headings and buttons */
+  --body: "Helvetica Neue", Helvetica, Arial, sans-serif;                 /* everything else */
+}
+
+
+/* ---------------------------------------------------------------------
+   2. PAGE BASICS
+   --------------------------------------------------------------------- */
+
+/* Make width and height include the padding and border, so sizes are predictable. */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;                            /* remove the browser's default gap */
+  min-height: 100vh;                    /* at least as tall as the window */
+  display: grid;
+  place-items: center;                  /* put the card in the middle of the window */
+  background: var(--yellow);
+  background-image: radial-gradient(var(--ink) 1.2px, transparent 1.3px);  /* tiny black dots... */
+  background-size: 22px 22px;           /* ...repeated every 22px, like graph paper */
+  color: var(--ink);
+  font-family: var(--body);
+  font-weight: 700;                     /* bold everywhere */
+  padding: 1.25rem 1rem 2rem;           /* space around the card */
+}
+
+
+/* ---------------------------------------------------------------------
+   3. THE MAIN CARD
+   <main> holds the whole game: the white box with the big shadow.
+   --------------------------------------------------------------------- */
+main {
+  width: 100%;
+  max-width: 40rem;                     /* stops it getting too wide on big screens */
+  text-align: center;
+  background: var(--paper);
+  border: var(--border);
+  box-shadow: 10px 10px 0 var(--ink);   /* a bigger hard shadow than the small items */
+  padding: 1.5rem 1.25rem 1.75rem;
+}
+
+
+/* ---------------------------------------------------------------------
+   4. TITLE AND INTRO TEXT
+   --------------------------------------------------------------------- */
+h1 {
+  display: inline-block;                /* the box hugs the text instead of stretching */
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: clamp(2rem, 9vw, 3.4rem);  /* scales with screen width, but never below 2rem or above 3.4rem */
+  line-height: 1;
+  margin: 0 0 1.25rem;
+  padding: .4rem .9rem .5rem;
+  background: var(--blue);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  transform: rotate(-1.5deg);           /* a slight tilt, just for style */
+}
+
+p.intro {
+  margin: 0 auto 1.25rem;
+  max-width: 32rem;                     /* keeps lines short enough to read */
+  font-size: 1.05rem;
+  line-height: 1.45;
+}
+
+
+/* ---------------------------------------------------------------------
+   5. LEVEL / LIVES / STREAK BOXES
+   #hud is the row. Each <span> inside it is one small labeled box.
+   Each box says its info in words and numbers, so color is only decoration.
+   --------------------------------------------------------------------- */
+#hud {
+  display: flex;                        /* put the three boxes in a row */
+  gap: .75rem;
+  justify-content: center;
+  flex-wrap: wrap;                      /* drop to a second line on narrow screens */
+  margin: 0 0 1.5rem;
+  font-size: 1.05rem;
+}
+
+#hud span {                             /* the shared look of all three boxes */
+  padding: .35rem .8rem;
+  border: 3px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  background: var(--paper);
+}
+
+/* Each box gets its own color. !important makes sure these beat the rule above. */
+#levelInfo  { background: var(--yellow) !important; }
+#livesInfo  { background: var(--pink) !important; }
+#streakInfo { background: var(--mint) !important; }
+
+/* The hearts live in a span INSIDE the lives box. They shouldn't get a box of their own. */
+#hud .hearts {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: none !important;
+  letter-spacing: .1em;                 /* a little gap between hearts */
+}
+
+
+/* ---------------------------------------------------------------------
+   6. THE ROW OF BEATS
+   #beats is the list that holds one <li> per beat. Each <li> holds one button.
+   The JavaScript sets each <li>'s height at random. It has nothing to do with the notes.
+   --------------------------------------------------------------------- */
+#beats {
+  list-style: none;                     /* no bullet points */
+  display: flex;
+  gap: .65rem;
+  align-items: flex-end;                /* line the bars up along the bottom, so heights differ at the top */
+  justify-content: center;
+  height: 9rem;                         /* the tallest a bar can be (100% of this) */
+  margin: 0 0 1.75rem;
+  padding: 0 6px 6px 0;                 /* extra room so the hard shadows aren't clipped */
+}
+
+#beats li {
+  flex: 1;                              /* share the row's width equally */
+  max-width: 5rem;
+  min-width: 0;                         /* lets narrow buttons shrink instead of overflowing */
+}
+
+/* "compact" is added by JavaScript when a level has 9 or more beats. Tighter gaps so they fit on a phone. */
+#beats.compact { gap: .3rem; }
+
+
+/* ---------------------------------------------------------------------
+   7. BEAT BUTTONS: BASE LOOK
+   --------------------------------------------------------------------- */
+.beat {
+  width: 100%;
+  height: 100%;                         /* fill the <li>, whose height is random */
+  display: flex;
+  flex-direction: column;               /* number on top, small word underneath */
+  align-items: center;
+  justify-content: flex-end;            /* text sits at the bottom of the bar */
+  gap: .15rem;
+  padding: 0 .1rem .45rem;
+  background: var(--paper);
+  color: var(--ink);
+  border: var(--border);
+  border-radius: 0;                     /* sharp corners */
+  box-shadow: 5px 5px 0 var(--ink);
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 1.3rem;
+  cursor: pointer;
+  transition: transform .08s, box-shadow .08s;   /* a very quick slide when hovering or pressing */
+}
+
+/* The small word under the number, like "changed" or "your guess". */
+.beat .tag {
+  font-family: var(--body);
+  font-size: .75rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+/* Compact version (9+ beats): smaller text, thinner border and shadow, and no small word.
+   The words are still in each button's hidden label, so screen readers hear them. */
+.compact .beat { font-size: .85rem; border-width: 3px; box-shadow: 3px 3px 0 var(--ink); }
+.compact .beat .tag { display: none; }
+
+
+/* ---------------------------------------------------------------------
+   8. BEAT BUTTONS: HOVER, PRESSED AND LOCKED
+   :enabled means "can be clicked right now". :disabled means "locked".
+   Locked buttons look flat and grey, so you can tell by shape and not just by color.
+   --------------------------------------------------------------------- */
+.beat:enabled:hover {                   /* mouse over: lift up and turn yellow */
+  transform: translate(-2px, -2px);
+  box-shadow: 8px 8px 0 var(--ink);
+  background: var(--yellow);
+}
+
+.beat:enabled:active {                  /* while clicking: press down, shadow disappears */
+  transform: translate(5px, 5px);
+  box-shadow: 0 0 0 var(--ink);
+}
+
+.beat:disabled {                        /* locked: grey, flat, pushed into the page */
+  cursor: not-allowed;
+  background: var(--grey);
+  color: #333;
+  box-shadow: none;
+  transform: translate(5px, 5px);
+}
+
+.compact .beat:disabled { transform: translate(3px, 3px); }   /* smaller push for the smaller shadow */
+
+
+/* ---------------------------------------------------------------------
+   9. BEAT BUTTONS: AFTER A GUESS
+   JavaScript adds the class "answer" to the changed beat and "guess" to a wrong choice.
+   Shape differs as well as color: double border for the answer, dashed for a wrong guess.
+   --------------------------------------------------------------------- */
+.beat.answer { background: var(--mint); border-style: double; border-width: 8px; }
+.beat.guess  { background: var(--pink); border-style: dashed; border-width: 5px; }
+
+.compact .beat.answer { border-width: 6px; }
+.compact .beat.guess  { border-width: 4px; }
+
+
+/* ---------------------------------------------------------------------
+   10. BEAT BUTTONS: THE ONE PLAYING RIGHT NOW
+   JavaScript adds the class "active" to the beat that is sounding.
+   It turns solid black with white text and sits pressed in.
+   This rule comes AFTER the others so it wins when classes overlap.
+   --------------------------------------------------------------------- */
+.beat.active,
+.beat.active:disabled {
+  background: var(--ink);
+  color: var(--paper);
+  border-style: solid;
+  border-width: 4px;
+  box-shadow: none;
+  transform: translate(5px, 5px);
+}
+
+.compact .beat.active,
+.compact .beat.active:disabled { border-width: 3px; transform: translate(3px, 3px); }
+
+
+/* ---------------------------------------------------------------------
+   11. PLAY / NEXT / RESTART BUTTONS
+   --------------------------------------------------------------------- */
+#controls {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;                      /* stack on narrow screens */
+}
+
+.action {                               /* the shared look of all three buttons */
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 1.15rem;
+  padding: .8rem 1.5rem;
+  border: var(--border);
+  border-radius: 0;
+  background: var(--yellow);            /* Play / Replay is yellow */
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: transform .08s, box-shadow .08s;
+}
+
+#next { background: var(--mint); }              /* Next level / Try level again is mint */
+.action.secondary { background: var(--paper); } /* Restart is white */
+
+.action:enabled:hover   { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 var(--ink); }
+.action:enabled:active  { transform: translate(6px, 6px); box-shadow: 0 0 0 var(--ink); }
+.action:disabled {                      /* locked while sound plays */
+  background: var(--grey);
+  color: #333;
+  box-shadow: none;
+  transform: translate(6px, 6px);
+  cursor: not-allowed;
+}
+
+
+/* ---------------------------------------------------------------------
+   12. KEYBOARD FOCUS AND THE HIDDEN ATTRIBUTE
+   --------------------------------------------------------------------- */
+
+/* When someone uses the Tab key, the focused button gets a thick blue outline,
+   set well away from the black border so it is easy to see. */
+button:focus-visible { outline: 5px solid var(--focus); outline-offset: 4px; }
+
+/* Makes the HTML "hidden" attribute always win (used for the Next and Restart buttons). */
+[hidden] { display: none !important; }
+
+
+/* ---------------------------------------------------------------------
+   13. STATUS MESSAGE BOX
+   Where the game talks to the player: "Playing...", "Correct!", and so on.
+   --------------------------------------------------------------------- */
+#status {
+  min-height: 4.5rem;                   /* reserves space so the page doesn't jump as messages change */
+  margin: 1.75rem auto 0;
+  max-width: 30rem;
+  padding: .8rem 1rem;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  box-shadow: 5px 5px 0 var(--ink);
+  font-size: 1.1rem;
+  line-height: 1.35;
+  display: flex;
+  align-items: center;                  /* center the text up-and-down... */
+  justify-content: center;              /* ...and left-and-right */
+}
+
+
+/* ---------------------------------------------------------------------
+   14. REDUCED MOTION
+   Some people set their device to avoid animation. This switches off the
+   hover slide and the title tilt for them.
+   --------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .beat, .action { transition: none; }
+  h1 { transform: none; }
+}
