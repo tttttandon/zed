@@ -8,20 +8,23 @@
         with ONE note changed.
      2. Player presses Play. Both melodies are scheduled on the audio clock.
      3. The beat buttons unlock. Player clicks the beat they think changed.
-     4. The game checks the guess, updates lives / streak / level,
-        and offers Replay, Next level (or Try again), and Restart.
+     4. The game checks the guess, plays a sound effect, updates lives /
+        streak / level / best scores, and offers Replay, Next level
+        (or Try again), and Restart.
 
    Sections in this file:
-     1. Data: the levels, the notes, the random helpers
+     1. Data: levels, instruments, scales, sound effects, random helpers
      2. State: the variables that change as the game runs
      3. Page elements: grabbing things from index.html
-     4. Drawing helpers: status text, beat buttons, info boxes, which buttons are on
-     5. Scheduling notes (the new technique: the audio clock)
-     6. Playing both melodies
-     7. Keeping the screen in sync with the sound
-     8. The guess and the result
-     9. Rounds and levels
-    10. Start
+     4. Saving: best scores and options in localStorage
+     5. Drawing helpers: status text, beat buttons, info boxes, which buttons are on
+     6. Scheduling notes and sound effects (the new technique: the audio clock)
+     7. Playing both melodies
+     8. Keeping the screen in sync with the sound
+     9. The guess and the result
+    10. Rounds, levels and the practice round
+    11. The How to play panel and the Options
+    12. Start
    ===================================================================== */
 
 
@@ -52,16 +55,50 @@ const TOTAL_LEVELS = LEVELS.length;   // 10, worked out from the list so it neve
 const START_LIVES = 3;                // lives at the start of a game
 const PAUSE_SECONDS = 1.2;            // silence between the original and the changed melody
 
-/* Notes are stored as "scale steps" in C major:
-   0 = C, 1 = D, 2 = E, 3 = F, 4 = G, 5 = A, 6 = B, 7 = the next C up, and so on.
-   They only become real sound frequencies (in Hertz) at the moment they are played.
-   MAJOR_SEMITONES says how far each step of the scale is above C, in half-steps. */
-const MAJOR_SEMITONES = [0, 2, 4, 5, 7, 9, 11];
+/* The instrument choices in Options. An "instrument" here is just a waveform shape,
+   which gives the tone a different character:
+     type    the Web Audio waveform name
+     volume  how loud (bright waveforms are louder, so they get a lower number) */
+const INSTRUMENTS = {
+  flute: { label: "Flute (soft)",       type: "triangle", volume: 0.40 },
+  bell:  { label: "Pure tone (smooth)", type: "sine",     volume: 0.45 },
+  synth: { label: "Synth (bright)",     type: "sawtooth", volume: 0.18 },
+  retro: { label: "Retro game (buzzy)", type: "square",   volume: 0.16 }
+};
 
+/* The scale choices in Options. "semitones" says how far each step of the scale is above
+   the starting note, counted in half-steps (a piano key to the next key is one half-step).
+   Major sounds bright, minor sounds moodier. */
+const SCALES = {
+  major: { label: "Major (bright)", semitones: [0, 2, 4, 5, 7, 9, 11] },
+  minor: { label: "Minor (moody)",  semitones: [0, 2, 3, 5, 7, 8, 10] }
+};
+
+/* The little jingles that play after a guess. Each is a list of pitches (in Hertz),
+   the gap between notes in seconds, and the waveform and volume to use. */
+const SFX = {
+  correct:  { notes: [523.25, 659.25, 783.99],                         gap: 0.09, type: "triangle", volume: 0.30 },
+  win:      { notes: [523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5], gap: 0.13, type: "triangle", volume: 0.30 },
+  wrong:    { notes: [196.0, 155.56],                                  gap: 0.18, type: "square",   volume: 0.14 },
+  gameover: { notes: [196.0, 174.61, 155.56, 130.81],                  gap: 0.25, type: "sawtooth", volume: 0.16 }
+};
+
+/* The names (keys) used to save things in localStorage. */
+const KEYS = {
+  best: "findTheNote.best",
+  settings: "findTheNote.settings",
+  seenHowTo: "findTheNote.seenHowTo"
+};
+
+/* Notes are stored as "scale steps":
+   0 = the first note of the scale (C), 1 = the next, ... 7 = the same note one octave up, and so on.
+   They only become real sound frequencies (in Hertz) at the moment they are played,
+   which is why switching the scale in Options changes how the same melody sounds. */
 function stepToFreq(step) {
+  const scale = SCALES[settings.scale].semitones;
   /* Math.floor(step / 7) counts how many full octaves up we are (7 steps per octave).
      step % 7 is the position inside the octave. 12 half-steps make one octave. */
-  const semitones = 12 * Math.floor(step / 7) + MAJOR_SEMITONES[step % 7];
+  const semitones = 12 * Math.floor(step / 7) + scale[step % 7];
   /* Each half-step multiplies the frequency by the 12th root of 2. 261.63 Hz is middle C. */
   return 261.63 * Math.pow(2, semitones / 12);
 }
@@ -95,12 +132,14 @@ function makeMelody(length) {
      "waiting for guess"  beat buttons are unlocked
      "result"             a guess was made
    outcome (only used in the "result" phase) is one of:
-     "correct", "wrong", "gameover", "won"
+     "correct", "wrong", "gameover", "won",
+     "practice-correct", "practice-wrong"
    --------------------------------------------------------------------- */
 let audioCtx = null;      // the Web Audio "sound engine"; created on the first click
 let phase = "idle";
 let outcome = null;
 let started = false;      // has the player pressed Play yet in this game?
+let practice = false;     // true during a practice round (nothing counts)
 let startTime = 0;        // the audio-clock time when the original melody began
 let lastStatus = "";      // the last message shown, so we don't rewrite the same one
 
@@ -108,6 +147,11 @@ let lastStatus = "";      // the last message shown, so we don't rewrite the sam
 let level = 1;
 let lives = START_LIVES;
 let streak = 0;           // correct guesses in a row
+let newBestNote = "";     // extra sentence like " New best streak: 4!" added to the result message
+
+/* Saved state (loaded from localStorage in section 4) */
+let settings = loadSettings();   // { instrument, scale, sfx }
+let best = loadBest();           // { level, streak }
 
 /* Current-round state */
 let cfg = LEVELS[0];      // this level's settings (a row from the LEVELS list)
@@ -132,10 +176,66 @@ const beatsList = document.getElementById("beats");
 const levelInfo = document.getElementById("levelInfo");
 const livesInfo = document.getElementById("livesInfo");
 const streakInfo = document.getElementById("streakInfo");
+const bestLine = document.getElementById("bestLine");
+
+const howBtn = document.getElementById("howBtn");
+const howPanel = document.getElementById("howto");
+const howTitle = document.getElementById("howtoTitle");
+const practiceBtn = document.getElementById("practiceBtn");
+const closeHowBtn = document.getElementById("closeHow");
+
+const instrumentSel = document.getElementById("instrument");
+const scaleSel = document.getElementById("scale");
+const sfxBox = document.getElementById("sfx");
+const resetBtn = document.getElementById("resetBests");
 
 
 /* ---------------------------------------------------------------------
-   4. DRAWING HELPERS
+   4. SAVING (localStorage)
+   localStorage is a small storage space inside the player's own browser.
+   We save only options and two numbers: no names, nothing personal, nothing sent anywhere.
+   It is wrapped in try/catch because some browsers (like private windows) block it.
+   If it is blocked the game still works, it just forgets things when the page closes.
+   --------------------------------------------------------------------- */
+
+/* Read a saved value. Returns the fallback if nothing is saved or reading fails. */
+function loadSaved(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (error) {
+    return fallback;
+  }
+}
+
+/* Save a value (turned into text with JSON). */
+function save(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    /* Blocked or full: ignore it and keep playing. */
+  }
+}
+
+/* Load the options, checking each value is one we know, so a bad saved value can't break the game. */
+function loadSettings() {
+  const saved = loadSaved(KEYS.settings, null) || {};
+  return {
+    instrument: saved.instrument in INSTRUMENTS ? saved.instrument : "flute",
+    scale: saved.scale in SCALES ? saved.scale : "major",
+    sfx: saved.sfx !== false                     // sound effects are on unless saved as off
+  };
+}
+
+/* Load the best scores, making sure they are real numbers. */
+function loadBest() {
+  const saved = loadSaved(KEYS.best, null) || {};
+  return { level: Number(saved.level) || 0, streak: Number(saved.streak) || 0 };
+}
+
+
+/* ---------------------------------------------------------------------
+   5. DRAWING HELPERS
    Small functions that update what the player sees.
    --------------------------------------------------------------------- */
 
@@ -188,6 +288,14 @@ function buildBeats() {
 
 /* Update the Level / Lives / Streak boxes. */
 function updateHud() {
+  if (practice) {
+    /* Practice rounds have no lives or streak, so say so and hide the streak box. */
+    levelInfo.textContent = "Practice round";
+    livesInfo.textContent = "No lives lost in practice";
+    streakInfo.hidden = true;
+    return;
+  }
+  streakInfo.hidden = false;
   levelInfo.textContent = "Level " + level + " of " + TOTAL_LEVELS;
   livesInfo.textContent = "Lives: " + lives + " ";
   /* Hearts are extra decoration. A full heart for each life left, an empty one for each lost.
@@ -198,6 +306,15 @@ function updateHud() {
   hearts.textContent = "\u2665".repeat(lives) + "\u2661".repeat(START_LIVES - lives);
   livesInfo.appendChild(hearts);
   streakInfo.textContent = "Streak: " + streak;
+}
+
+/* Show the saved best scores under the Level / Lives / Streak boxes. */
+function updateBestLine() {
+  if (best.level === 0 && best.streak === 0) {
+    bestLine.textContent = "No best scores yet. Play to set some!";
+  } else {
+    bestLine.textContent = "Best level: " + best.level + " of " + TOTAL_LEVELS + ". Best streak: " + best.streak + ".";
+  }
 }
 
 /* ONE place decides which buttons are on or off and what they say, based on the phase.
@@ -220,29 +337,46 @@ function refreshControls() {
   playBtn.disabled = playing || (phase === "waiting for guess" && replaysLeft === 0);
 
   /* The Next button only appears after a result that lets the game continue. */
-  const moreToPlay = phase === "result" && (outcome === "correct" || outcome === "wrong");
+  const moreToPlay = phase === "result" &&
+    ["correct", "wrong", "practice-correct", "practice-wrong"].includes(outcome);
   nextBtn.hidden = !moreToPlay;
-  nextBtn.textContent = outcome === "correct" ? "Next level" : "Try level again";
+  nextBtn.textContent = practice ? "Another practice round" :
+                        outcome === "correct" ? "Next level" : "Try level again";
 
-  /* Restart appears after the first Play, and is locked while sound plays. */
-  restartBtn.hidden = !started;
+  /* Restart appears after the first Play (or any time in practice), and is locked while sound plays.
+     In practice it becomes the way to begin the real game. */
+  restartBtn.hidden = !(started || practice);
+  restartBtn.textContent = practice ? "Start the real game" : "Restart";
   restartBtn.disabled = playing;
+
+  /* Don't let the player start a practice round, or change the sound, in the middle of a melody. */
+  practiceBtn.disabled = playing;
+  instrumentSel.disabled = playing;
+  scaleSel.disabled = playing;
 }
 
 
 /* ---------------------------------------------------------------------
-   5. SCHEDULING NOTES  (the new technique from my plan)
+   6. SCHEDULING NOTES AND SOUND EFFECTS  (the new technique from my plan)
    We never use setTimeout to play notes, because it can drift by tens of
    milliseconds and make the beats uneven. Instead we give every note an
    exact start time on the AUDIO CLOCK (audioCtx.currentTime), which runs
    on the sound hardware and is very steady.
    --------------------------------------------------------------------- */
 
-/* Schedule one note: its pitch (freq), exact start time (when), and how long it rings (length). */
-function scheduleNote(freq, when, length) {
+/* Get the sound engine, making it the first time. Browsers only allow sound after a click,
+   so this is only ever called from inside a click or change handler. */
+function getAudioContext() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+/* Schedule one note: its pitch (freq), exact start time (when), how long it rings (length),
+   the waveform (type) and how loud (volume). */
+function scheduleNote(freq, when, length, type, volume) {
   const osc = audioCtx.createOscillator();   // the thing that makes the tone
   const gain = audioCtx.createGain();        // a volume knob
-  osc.type = "triangle";                     // a soft, flute-like sound
+  osc.type = type;
   osc.frequency.value = freq;
 
   /* Fade in and out quickly. Starting or stopping a tone instantly makes a click.
@@ -250,8 +384,8 @@ function scheduleNote(freq, when, length) {
   const attack = Math.min(0.02, length * 0.15);
   const release = Math.min(0.08, length * 0.35);
   gain.gain.setValueAtTime(0, when);                              // silent at the start
-  gain.gain.linearRampToValueAtTime(0.4, when + attack);          // fade up
-  gain.gain.setValueAtTime(0.4, when + length - release);         // stay loud...
+  gain.gain.linearRampToValueAtTime(volume, when + attack);       // fade up
+  gain.gain.setValueAtTime(volume, when + length - release);      // stay loud...
   gain.gain.linearRampToValueAtTime(0, when + length);            // ...then fade out
 
   osc.connect(gain);                         // tone -> volume knob
@@ -260,21 +394,44 @@ function scheduleNote(freq, when, length) {
   osc.stop(when + length);                   // end at the exact time
 }
 
-/* Schedule a whole melody. Note number i starts i beats after the melody's start,
-   so every beat is exactly the same length. */
+/* Schedule a whole melody using the chosen instrument. Note number i starts i beats
+   after the melody's start, so every beat is exactly the same length. */
 function scheduleMelody(steps, melodyStart) {
+  const instrument = INSTRUMENTS[settings.instrument];
   steps.forEach((step, i) => {
-    scheduleNote(stepToFreq(step), melodyStart + i * cfg.beat, cfg.beat * 0.85);
+    scheduleNote(stepToFreq(step), melodyStart + i * cfg.beat, cfg.beat * 0.85, instrument.type, instrument.volume);
+  });
+}
+
+/* Play one of the jingles from the SFX list ("correct", "win", "wrong" or "gameover").
+   Does nothing if sound effects are switched off in Options. */
+function playSfx(kind) {
+  if (!settings.sfx || !audioCtx || audioCtx.state !== "running") return;
+  const jingle = SFX[kind];
+  const t0 = audioCtx.currentTime + 0.05;
+  jingle.notes.forEach((freq, i) => {
+    scheduleNote(freq, t0 + i * jingle.gap, jingle.gap * 1.5, jingle.type, jingle.volume);
+  });
+}
+
+/* A short four-note preview, so the player hears an Options change right away. */
+function previewSound() {
+  getAudioContext().resume().then(() => {
+    if (audioCtx.state !== "running") return;
+    const instrument = INSTRUMENTS[settings.instrument];
+    const t0 = audioCtx.currentTime + 0.05;
+    [0, 2, 4, 7].forEach((step, i) => {
+      scheduleNote(stepToFreq(step), t0 + i * 0.25, 0.22, instrument.type, instrument.volume);
+    });
   });
 }
 
 
 /* ---------------------------------------------------------------------
-   6. PLAYING BOTH MELODIES  (used by Play and by Replay)
+   7. PLAYING BOTH MELODIES  (used by Play and by Replay)
    --------------------------------------------------------------------- */
 function playBoth() {
-  /* Browsers only allow sound after a click, so the sound engine is made here, on the click. */
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  getAudioContext();
 
   audioCtx.resume().then(() => {
     /* Failure case from my plan: if the browser still blocks sound, say so. */
@@ -285,6 +442,13 @@ function playBoth() {
 
     /* A replay before you've guessed uses up one of this level's replays. */
     if (phase === "waiting for guess" && replaysLeft !== Infinity) replaysLeft--;
+
+    /* The first Play of a real round counts as reaching this level. Save it if it's a new best. */
+    if (!practice && phase === "idle" && level > best.level) {
+      best.level = level;
+      save(KEYS.best, best);
+      updateBestLine();
+    }
 
     started = true;
     phase = "playing original";
@@ -303,7 +467,7 @@ function playBoth() {
 
 
 /* ---------------------------------------------------------------------
-   7. KEEPING THE SCREEN IN SYNC WITH THE SOUND
+   8. KEEPING THE SCREEN IN SYNC WITH THE SOUND
    requestAnimationFrame runs a function once per screen refresh.
    Each time, we ask the audio clock how far along we are, then work out
    the phase, the message, and which beat to light up.
@@ -354,18 +518,24 @@ function finishPlaying() {
 
 
 /* ---------------------------------------------------------------------
-   8. THE GUESS AND THE RESULT
+   9. THE GUESS AND THE RESULT
    --------------------------------------------------------------------- */
 
 /* Builds the sentence shown after a guess, based on the outcome. */
 function resultMessage() {
   const answer = changedBeat + 1;      // +1 because players count from 1, code counts from 0
   const mine = guess + 1;
+  if (outcome === "practice-correct") {
+    return "Correct! Beat " + answer + " was the changed note. That was practice, so nothing counts. Try another, or start the real game.";
+  }
+  if (outcome === "practice-wrong") {
+    return "Not quite, it was beat " + answer + ". You chose beat " + mine + ". Practice never costs lives. Try another, or start the real game.";
+  }
   if (outcome === "won") {
-    return "Correct! Beat " + answer + " was the changed note. You cleared all " + TOTAL_LEVELS + " levels. You win!";
+    return "Correct! Beat " + answer + " was the changed note. You cleared all " + TOTAL_LEVELS + " levels. You win!" + newBestNote;
   }
   if (outcome === "correct") {
-    return "Correct! Beat " + answer + " was the changed note. Level " + level + " cleared.";
+    return "Correct! Beat " + answer + " was the changed note. Level " + level + " cleared." + newBestNote;
   }
   if (outcome === "gameover") {
     return "Not quite, it was beat " + answer + ". You chose beat " + mine + ". Game over: you reached level " + level + ". Restart to try again.";
@@ -379,11 +549,20 @@ function handleGuess(i) {
   /* Safety check: ignore a click at any other time (backs up the locked buttons). */
   if (phase !== "waiting for guess") return;
   guess = i;
+  const right = i === changedBeat;
+  newBestNote = "";
 
   /* Compare the guess to the changed beat, then update the game. */
-  if (i === changedBeat) {
+  if (practice) {
+    outcome = right ? "practice-correct" : "practice-wrong";    // nothing counts in practice
+  } else if (right) {
     streak++;
-    outcome = level === TOTAL_LEVELS ? "won" : "correct";    // correct on level 10 means you win
+    outcome = level === TOTAL_LEVELS ? "won" : "correct";       // correct on level 10 means you win
+    if (streak > best.streak) {                                 // a new best streak? remember it
+      best.streak = streak;
+      save(KEYS.best, best);
+      if (streak >= 2) newBestNote = " New best streak: " + streak + "!";
+    }
   } else {
     streak = 0;
     lives--;
@@ -395,12 +574,17 @@ function handleGuess(i) {
      A wrong guess gets "your guess" and the "guess" style (dashed border). */
   drawBeat(changedBeat, "changed");
   beatEls[changedBeat].classList.add("answer");
-  if (i !== changedBeat) {
+  if (!right) {
     drawBeat(i, "your guess");
     beatEls[i].classList.add("guess");
   }
 
+  /* Play the matching jingle. */
+  if (right) playSfx(outcome === "won" ? "win" : "correct");
+  else playSfx(outcome === "gameover" ? "gameover" : "wrong");
+
   updateHud();
+  updateBestLine();
   refreshControls();
   setStatus(resultMessage());
   /* The beat just clicked became locked, so move keyboard focus to the main next action. */
@@ -409,7 +593,7 @@ function handleGuess(i) {
 
 
 /* ---------------------------------------------------------------------
-   9. ROUNDS AND LEVELS
+   10. ROUNDS, LEVELS AND THE PRACTICE ROUND
    --------------------------------------------------------------------- */
 
 /* Set up a fresh round for the current level. */
@@ -432,25 +616,36 @@ function newRound() {
   outcome = null;
   phase = "idle";
   replaysLeft = cfg.replays;
+  newBestNote = "";
+
+  /* Beating your furthest level so far gets a shout-out (practice doesn't count).
+     The best level is only saved once you press Play, in playBoth(). */
+  const levelNote = (!practice && level > 1 && level > best.level) ? " New best level!" : "";
 
   buildBeats();
   updateHud();
+  updateBestLine();
   refreshControls();
 
-  const replayNote = cfg.replays === Infinity ? "" :
-    " You can replay " + cfg.replays + (cfg.replays === 1 ? " time" : " times") + " before you guess.";
-  setStatus("Level " + level + " of " + TOTAL_LEVELS + "." + replayNote + " Press Play.");
+  if (practice) {
+    setStatus("Practice round. Nothing counts here. Press Play, listen, then pick the beat that changed.");
+  } else {
+    const replayNote = cfg.replays === Infinity ? "" :
+      " You can replay " + cfg.replays + (cfg.replays === 1 ? " time" : " times") + " before you guess.";
+    setStatus("Level " + level + " of " + TOTAL_LEVELS + "." + levelNote + replayNote + " Press Play.");
+  }
 }
 
-/* The Next / Try again button. */
+/* The Next / Try again / Another practice round button. */
 function goNext() {
-  if (outcome === "correct") level++;            // after a wrong guess, the SAME level starts again
+  if (outcome === "correct") level++;            // after a wrong guess (or in practice), the SAME level starts again
   newRound();
   playBtn.focus();
 }
 
-/* The Restart button: a brand new game from level 1. */
+/* The Restart button (also "Start the real game" after practice): a brand new game from level 1. */
 function restart() {
+  practice = false;
   level = 1;
   lives = START_LIVES;
   streak = 0;
@@ -459,12 +654,105 @@ function restart() {
   playBtn.focus();
 }
 
+/* The practice round: a level-1 round where nothing counts. It ends any game in progress. */
+function startPractice() {
+  practice = true;
+  level = 1;
+  lives = START_LIVES;
+  streak = 0;
+  started = false;
+  closeHowTo(false);
+  newRound();
+  playBtn.focus();
+}
+
 
 /* ---------------------------------------------------------------------
-   10. START
-   Connect each button to its function, then set up the first round.
+   11. THE HOW TO PLAY PANEL AND THE OPTIONS
+   --------------------------------------------------------------------- */
+
+/* Open the How to play panel. If moveFocus is true, keyboard focus moves to its heading
+   so screen reader users know it opened. */
+function openHowTo(moveFocus) {
+  howPanel.hidden = false;
+  howBtn.setAttribute("aria-expanded", "true");
+  if (moveFocus) howTitle.focus();
+}
+
+/* Close it. If moveFocus is true, focus goes back to the How to play button. */
+function closeHowTo(moveFocus) {
+  howPanel.hidden = true;
+  howBtn.setAttribute("aria-expanded", "false");
+  if (moveFocus) howBtn.focus();
+}
+
+/* Fill a dropdown with one <option> per entry in a table (INSTRUMENTS or SCALES),
+   and select the saved one. */
+function fillSelect(selectEl, table, selectedKey) {
+  selectEl.innerHTML = "";
+  for (const key in table) {
+    const option = document.createElement("option");
+    option.value = key;
+    option.textContent = table[key].label;
+    selectEl.appendChild(option);
+  }
+  selectEl.value = selectedKey;
+}
+
+/* Set up the Options controls and connect them. */
+fillSelect(instrumentSel, INSTRUMENTS, settings.instrument);
+fillSelect(scaleSel, SCALES, settings.scale);
+sfxBox.checked = settings.sfx;
+
+instrumentSel.addEventListener("change", () => {
+  settings.instrument = instrumentSel.value;
+  save(KEYS.settings, settings);
+  previewSound();                                // let the player hear the new sound
+});
+
+scaleSel.addEventListener("change", () => {
+  settings.scale = scaleSel.value;
+  save(KEYS.settings, settings);
+  previewSound();
+});
+
+sfxBox.addEventListener("change", () => {
+  settings.sfx = sfxBox.checked;
+  save(KEYS.settings, settings);
+});
+
+resetBtn.addEventListener("click", () => {
+  /* confirm() shows a built-in yes/no box, so scores can't be wiped by accident. */
+  if (confirm("Reset your best level and best streak?")) {
+    best = { level: 0, streak: 0 };
+    save(KEYS.best, best);
+    updateBestLine();
+  }
+});
+
+/* How to play: the button toggles the panel, Close closes it, Escape closes it too. */
+howBtn.addEventListener("click", () => {
+  if (howPanel.hidden) openHowTo(true);
+  else closeHowTo(true);
+});
+closeHowBtn.addEventListener("click", () => closeHowTo(true));
+howPanel.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeHowTo(true);
+});
+practiceBtn.addEventListener("click", startPractice);
+
+
+/* ---------------------------------------------------------------------
+   12. START
+   Connect each game button to its function, set up the first round,
+   and show the How to play panel the very first time someone visits.
    --------------------------------------------------------------------- */
 playBtn.addEventListener("click", playBoth);
 nextBtn.addEventListener("click", goNext);
 restartBtn.addEventListener("click", restart);
 newRound();
+
+if (!loadSaved(KEYS.seenHowTo, false)) {
+  openHowTo(false);                     // open it, but don't steal keyboard focus on page load
+  save(KEYS.seenHowTo, true);
+}

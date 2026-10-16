@@ -18,12 +18,39 @@
     <!-- Short instructions for the player -->
     <p class="intro">You will hear a melody, then a second version with one note changed. Pick the beat that changed. Clear all 10 levels before you lose your 3 lives.</p>
 
+    <!-- Opens and closes the How to play panel below.
+         aria-expanded tells screen readers whether the panel is open (script.js keeps it up to date).
+         aria-controls says which panel this button controls. -->
+    <button id="howBtn" class="action small secondary" type="button" aria-expanded="false" aria-controls="howto">How to play</button>
+
+    <!-- The How to play panel. "hidden" keeps it closed until the button is pressed
+         (it opens by itself the very first time someone visits).
+         tabindex="-1" on the heading lets script.js move keyboard focus there when it opens. -->
+    <section id="howto" class="panel" hidden aria-labelledby="howtoTitle">
+      <h2 id="howtoTitle" tabindex="-1">How to play</h2>
+      <ol>
+        <li>Press Play. You hear a short melody, a pause, then the same melody again with ONE note changed.</li>
+        <li>Pick the beat number where the note changed.</li>
+        <li>Right: you move up a level. Wrong: you lose a life and try the level again. You have 3 lives.</li>
+        <li>Higher levels are longer and faster, the change gets smaller, and some levels limit your replays.</li>
+      </ol>
+      <p>Tip: headphones make small changes easier to hear. You can change the sound in Options at the bottom.</p>
+      <p>A practice round never costs lives, but it does end any game in progress.</p>
+      <div class="panel-buttons">
+        <button id="practiceBtn" class="action small" type="button">Try a practice round</button>
+        <button id="closeHow" class="action small secondary" type="button">Close</button>
+      </div>
+    </section>
+
     <!-- The three info boxes. Each is empty here; script.js writes into them. -->
     <p id="hud">
       <span id="levelInfo"></span>   <!-- "Level 3 of 10" -->
       <span id="livesInfo"></span>   <!-- "Lives: 3 and hearts" -->
       <span id="streakInfo"></span>  <!-- "Streak: 2" -->
     </p>
+
+    <!-- Your saved best level and best streak (script.js fills this in) -->
+    <p id="bestLine"></p>
 
     <!-- The beat buttons. This list starts empty, and script.js builds one button per beat
          for each round. aria-label gives screen readers a name for the group. -->
@@ -40,6 +67,29 @@
     <!-- The message box. role="status" tells screen readers to read out
          changes to this text politely, so blind players hear what is happening. -->
     <p id="status" role="status"></p>
+
+    <!-- OPTIONS: <details> is a built-in open-and-close box that works with the keyboard.
+         Every form field has a <label>, so screen readers say what each one is.
+         The choices inside the two <select> lists are added by script.js, from its INSTRUMENTS and SCALES lists. -->
+    <details id="options" class="panel">
+      <summary>Options and best scores</summary>
+
+      <label class="field">Instrument
+        <select id="instrument"></select>
+      </label>
+
+      <label class="field">Scale
+        <select id="scale"></select>
+      </label>
+
+      <label class="check">
+        <input type="checkbox" id="sfx">
+        Sound effects for right and wrong answers
+      </label>
+
+      <p class="note">Your options and best scores are saved only in this browser. Nothing is sent anywhere.</p>
+      <button id="resetBests" class="action small secondary" type="button">Reset best scores</button>
+    </details>
   </main>
 
   <!-- The JavaScript goes LAST so all the elements above exist before it runs. -->

@@ -18,9 +18,12 @@
      9. Beat buttons: after a guess
     10. Beat buttons: the one playing right now
     11. Play / Next / Restart buttons
-    12. Keyboard focus and the hidden attribute
-    13. Status message box
-    14. Reduced motion
+    12. Small buttons and the best-score line
+    13. Panels (How to play, Options)
+    14. Form fields (dropdowns and checkbox)
+    15. Keyboard focus and the hidden attribute
+    16. Status message box
+    17. Reduced motion
    ===================================================================== */
 
 
@@ -117,7 +120,7 @@ p.intro {
   gap: .75rem;
   justify-content: center;
   flex-wrap: wrap;                      /* drop to a second line on narrow screens */
-  margin: 0 0 1.5rem;
+  margin: 0 0 .75rem;
   font-size: 1.05rem;
 }
 
@@ -305,19 +308,129 @@ p.intro {
 
 
 /* ---------------------------------------------------------------------
-   12. KEYBOARD FOCUS AND THE HIDDEN ATTRIBUTE
+   12. SMALL BUTTONS AND THE BEST-SCORE LINE
+   ".small" is added to a button (together with "action") to shrink it.
+   --------------------------------------------------------------------- */
+.action.small {
+  font-size: .95rem;
+  padding: .5rem 1rem;
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+#howBtn { margin: 0 0 1.25rem; }       /* a little space under the How to play button */
+
+#bestLine {
+  margin: 0 0 1.5rem;
+  font-size: 1rem;
+}
+
+
+/* ---------------------------------------------------------------------
+   13. PANELS (HOW TO PLAY, OPTIONS)
+   ".panel" is the shared box look: thick border, hard shadow, left-aligned text.
+   --------------------------------------------------------------------- */
+.panel {
+  text-align: left;                     /* the card centers text, but long text reads better left-aligned */
+  border: var(--border);
+  box-shadow: var(--shadow);
+  padding: 1rem 1.25rem;
+  margin: 0 0 1.5rem;
+  line-height: 1.45;
+}
+
+.panel h2 {
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 1.4rem;
+  margin: 0 0 .75rem;
+}
+
+.panel ol { margin: 0 0 .75rem; padding-left: 1.4rem; }
+.panel li { margin-bottom: .4rem; }
+.panel p  { margin: .75rem 0 0; }
+
+.panel-buttons {                        /* the row of buttons at the bottom of How to play */
+  display: flex;
+  gap: .75rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+#howto { background: var(--blue); }
+
+#options { background: var(--yellow); margin: 1.75rem 0 0; }
+
+#options summary {                      /* the clickable title of the Options box */
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+#options .note { font-size: .9rem; margin: 1rem 0 .75rem; }
+
+
+/* ---------------------------------------------------------------------
+   14. FORM FIELDS (DROPDOWNS AND CHECKBOX)
+   --------------------------------------------------------------------- */
+.field {                                /* a label with its dropdown underneath */
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  margin-top: .9rem;
+  font-weight: 900;
+}
+
+select {
+  font: inherit;
+  font-weight: 700;
+  padding: .5rem .6rem;
+  border: 3px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+select:disabled {                       /* locked while a melody is playing */
+  background: var(--grey);
+  color: #333;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.check {                                /* the sound effects checkbox and its label */
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin-top: .9rem;
+  font-weight: 900;
+}
+
+.check input {
+  width: 1.5rem;
+  height: 1.5rem;
+  accent-color: var(--ink);             /* a black checkmark box that matches the style */
+}
+
+
+/* ---------------------------------------------------------------------
+   15. KEYBOARD FOCUS AND THE HIDDEN ATTRIBUTE
    --------------------------------------------------------------------- */
 
-/* When someone uses the Tab key, the focused button gets a thick blue outline,
+/* When someone uses the Tab key, the focused button, dropdown or checkbox gets a thick blue outline,
    set well away from the black border so it is easy to see. */
-button:focus-visible { outline: 5px solid var(--focus); outline-offset: 4px; }
+button:focus-visible,
+select:focus-visible,
+summary:focus-visible,
+input:focus-visible { outline: 5px solid var(--focus); outline-offset: 4px; }
 
 /* Makes the HTML "hidden" attribute always win (used for the Next and Restart buttons). */
 [hidden] { display: none !important; }
 
 
 /* ---------------------------------------------------------------------
-   13. STATUS MESSAGE BOX
+   16. STATUS MESSAGE BOX
    Where the game talks to the player: "Playing...", "Correct!", and so on.
    --------------------------------------------------------------------- */
 #status {
@@ -337,7 +450,7 @@ button:focus-visible { outline: 5px solid var(--focus); outline-offset: 4px; }
 
 
 /* ---------------------------------------------------------------------
-   14. REDUCED MOTION
+   17. REDUCED MOTION
    Some people set their device to avoid animation. This switches off the
    hover slide and the title tilt for them.
    --------------------------------------------------------------------- */
